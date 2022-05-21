@@ -1,0 +1,1030 @@
+#!/bin/bash
+#	Author: Roman Janota
+#	Login: xjanot04
+#	Email: xjanot04@stud.fit.vutbr.cz
+#	Date: 2022/03/31
+
+
+#	Definition of global variables
+
+POSIXLY_CORRECT=yes
+export LC_ALL=C
+input=""
+gz_input=""
+bz_input=""
+datetime_after=1990-01-01
+datetime_before=2100-02-24
+command_function=""
+width=-1
+has_no_input=1
+has_input=0
+has_bz_input=0
+has_gz_input=0
+is_number_regex='^[0-9]+$'
+data=""
+
+#	Prints help when the program is run with -h
+
+help_function() {
+	echo "Usage:"
+	echo "			corona [-h] [FILTERS] [COMMAND] [LOG [LOG2 [...]]"
+	echo ""
+	echo ""
+	echo "FILTERS:"
+	echo ""
+	echo "	-a DATETIME"
+	echo "			only records after DATETIME are processed"
+	echo ""
+	echo "	-b DATETIME"
+	echo "			only records before DATETIME are processed"
+	echo ""
+	echo "	-g GENDER"
+	echo "			only records with GENDER are processed"
+	echo ""
+	echo "	-s [WIDTH]"
+	echo "			shows histograms instead of numbers. [WIDTH] sets the length of the line with the most records"
+	echo ""
+	echo "COMMANDS:"
+	echo ""
+	echo "	infected"
+	echo "			calculates the number of infected"
+	echo ""
+	echo "	merge"
+	echo "			merges more logs into one, keeping the order"
+	echo ""
+	echo "	gender"
+	echo "			prints the number of infected for each gender"
+	echo ""
+	echo "	age"
+	echo "			prints the number of infected for each age"
+	echo ""
+	echo "	daily"
+	echo "			prints the number of infected for each day"
+	echo ""
+	echo "	monthly"
+	echo "			prints the number of infected for each month"
+	echo ""
+	echo "	yearly"
+	echo "			prints the number of infected for each year"
+	echo ""
+	echo "	countries"
+	echo "			prints the number of infected for each country"
+	echo ""
+	echo "	districts"
+	echo "			prints the number of infected for each district"
+	echo ""
+	echo "	regions"
+	echo "			prints the number of infected for each region"
+	echo ""
+	exit 0
+}
+
+#	Counts the amount of infected
+
+infectedCommand() {
+		awk 'BEGIN{FS=","
+		counter=0}
+		{if($1 != "id") {counter++;}} 
+		END{print counter}'
+}
+
+#	Merges two or more files into one and prints it to stdout
+
+mergeCommand() {
+	awk 'BEGIN{FS=","
+		print "id,datum,vek,pohlavi,kraj_nuts_kod,okres_lau_kod,nakaza_v_zahranici,nakaza_zeme_csu_kod,reportovano_khs"}
+		{if ($1 != "id") {print}
+		}'
+}
+
+#	Counts the amount of infected gender-wise
+
+genderCommand() {
+	if [ $width = -1 ]; then
+		awk 'BEGIN{FS=","
+		counterMale=0 
+		counterFemale=0
+		counterNone=0}
+		{if($4 == "M") {counterMale++}
+		else if($4 == "Z") {counterFemale++}
+		else {{if (FNR > 1) counterNone++}}} 
+		END{print "M: " counterMale; print "Z: " counterFemale; if(counterNone > 0) { print"None: ", counterNone}}'
+
+	elif [ $width = 0 ]; then
+		width=100000
+		awk -v wid="$width" 'BEGIN{FS=","
+		counterMale=0 
+		counterFemale=0
+		counterNone=0}
+		{if($4 == "M") {counterMale++}
+		else if($4 == "Z") {counterFemale++}
+		else {{if (FNR > 1) counterNone++}}} 
+		END{hashtag_countM=int(counterMale/wid); if(hashtag_countM < 0) {print "M: "} 
+		else {result=sprintf("%*s", hashtag_countM,""); gsub(" ", "#", result); printf("M: %s\n", result)}
+		hashtag_countF=int(counterFemale/wid); if(hashtag_countF < 0) {print "Z: "} 
+		else {result=sprintf("%*s", hashtag_countF,""); gsub(" ", "#", result); printf("Z: %s\n", result)}}'
+
+	else 
+		awk -v wid="$width" 'BEGIN{FS=","
+		counterMale=0 
+		counterFemale=0
+		counterNone=0}
+		{if($4 == "M") {counterMale++}
+		else if($4 == "Z") {counterFemale++}
+		else {{if ($1 != "") counterNone++}}} 
+		END{if (counterMale > counterFemale) {resultM=sprintf("%*s", wid,""); resultF=sprintf("%*s", ((wid * counterFemale)/counterMale), ""); gsub(" ", "#", resultM); gsub(" ", "#", resultF); printf("M: %s\nZ: %s\n", resultM, resultF);}
+		else {resultF=sprintf("%*s", wid ,""); resultM=sprintf("%*s", ((wid * counterMale)/counterFemale), ""); gsub(" ", "#", resultM); gsub(" ", "#", resultF); printf("M: %s\nZ: %s\n", resultM, resultF);}}'		
+	fi	
+}
+
+#	Counts the amount of infected age-wise
+
+ageCommand() {
+	if [ $width = -1 ]; then
+		awk 'BEGIN{FS=","
+		counterNone=0; counter0=0; counter6=0; counter16=0; counter26=0; counter36=0; counter46=0; counter56=0; counter66=0; counter76=0; counter86=0; counter96=0; counter106=0;}
+		{
+			if ($1 == "id") {next}
+			else if ($3 == "") {counterNone++}
+			else if ($3 >= 0 && $3 < 6) {counter0++}
+			else if ($3 >= 6 && $3 < 16) {counter6++}
+			else if ($3 >= 16 && $3 < 26) {counter16++}
+			else if ($3 >= 26 && $3 < 36) {counter26++}
+			else if ($3 >= 36 && $3 < 46) {counter36++}
+			else if ($3 >= 46 && $3 < 56) {counter46++}
+			else if ($3 >= 56 && $3 < 66) {counter56++}
+			else if ($3 >= 66 && $3 < 76) {counter66++}
+			else if ($3 >= 76 && $3 < 86) {counter76++}
+			else if ($3 >= 86 && $3 < 96) {counter86++}
+			else if ($3 >= 96 && $3 < 106) {counter96++}
+			else {counter106++}
+		}
+		END{
+			print "0-5   : " counter0;
+			print "6-15  : " counter6;
+			print "16-25 : " counter16;
+			print "26-35 : " counter26;
+			print "36-45 : " counter36;
+			print "46-55 : " counter46;
+			print "56-65 : " counter56;
+			print "66-75 : " counter66;
+			print "76-85 : " counter76;
+			print "86-95 : " counter86;
+			print "96-105: " counter96;
+			print ">105  : " counter106;
+			print "None  : " counterNone;
+		}'
+
+	elif [ $width = 0 ]; then
+		width=10000
+		awk -v wid="$width" 'BEGIN{FS=","
+		counterNone=0; counter0=0; counter6=0; counter16=0; counter26=0; counter36=0; counter46=0; counter56=0; counter66=0; counter76=0; counter86=0; counter96=0; counter106=0}
+		{
+			if ($1 == "id") {next}
+			else if ($3 == "") {counterNone++}
+			else if ($3 >= 0 && $3 < 6) {counter0++}
+			else if ($3 >= 6 && $3 < 16) {counter6++}
+			else if ($3 >= 16 && $3 < 26) {counter16++}
+			else if ($3 >= 26 && $3 < 36) {counter26++}
+			else if ($3 >= 36 && $3 < 46) {counter36++}
+			else if ($3 >= 46 && $3 < 56) {counter46++}
+			else if ($3 >= 56 && $3 < 66) {counter56++}
+			else if ($3 >= 66 && $3 < 76) {counter66++}
+			else if ($3 >= 76 && $3 < 86) {counter76++}
+			else if ($3 >= 86 && $3 < 96) {counter86++}
+			else if ($3 >= 96 && $3 < 106) {counter96++}
+			else {counter106++}
+		}
+		END{
+			crs_cnt = int(counter0/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result);  printf("0-5   : %s\n", result);
+			crs_cnt = int(counter6/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result);  printf("6-15  : %s\n", result);
+			crs_cnt = int(counter16/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("16-25 : %s\n", result);
+			crs_cnt = int(counter26/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("26-35 : %s\n", result);
+			crs_cnt = int(counter36/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("36-45 : %s\n", result);
+			crs_cnt = int(counter46/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("46-55 : %s\n", result);
+			crs_cnt = int(counter56/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("56-65 : %s\n", result);
+			crs_cnt = int(counter66/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("66-75 : %s\n", result);
+			crs_cnt = int(counter76/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("76-85 : %s\n", result);
+			crs_cnt = int(counter86/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("86-95 : %s\n", result);
+			crs_cnt = int(counter96/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("96-105: %s\n", result);
+			crs_cnt = int(counter106/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf(">105  : %s\n", result);
+			crs_cnt = int(counterNone/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("None  : %s\n", result);
+		}'
+
+	else
+		awk -v wid="$width" 'BEGIN{FS=","
+		counterNone=0; counter0=0; counter6=0; counter16=0; counter26=0; counter36=0; counter46=0; counter56=0; counter66=0; counter76=0; counter86=0; counter96=0; counter106=0}
+		{
+			if ($1 == "id") {next}
+			else if ($3 == "") {counterNone++}
+			else if ($3 >= 0 && $3 < 6) {counter0++}
+			else if ($3 >= 6 && $3 < 16) {counter6++}
+			else if ($3 >= 16 && $3 < 26) {counter16++}
+			else if ($3 >= 26 && $3 < 36) {counter26++}
+			else if ($3 >= 36 && $3 < 46) {counter36++}
+			else if ($3 >= 46 && $3 < 56) {counter46++}
+			else if ($3 >= 56 && $3 < 66) {counter56++}
+			else if ($3 >= 66 && $3 < 76) {counter66++}
+			else if ($3 >= 76 && $3 < 86) {counter76++}
+			else if ($3 >= 86 && $3 < 96) {counter86++}
+			else if ($3 >= 96 && $3 < 106) {counter96++}
+			else {counter106++}
+		}
+		END{
+			array[0] = counter0; array[1] = counter6; array[2] = counter16; array[3] = counter26; array[4] = counter36; array[5] = counter46;
+			array[6] = counter56; array[7] = counter66; array[8] = counter76; array[9] = counter86; array[10] = counter96; array[11] = counter106; array[12] = counterNone;
+			max = array[0];
+			for (i in array) {
+				if (array[i] > max) {
+					max = array[i];
+				}
+			}
+			crs_cnt = int((counter0*wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result);  printf("0-5   : %s\n", result);
+			crs_cnt = int((counter6*wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result);  printf("6-15  : %s\n", result);
+			crs_cnt = int((counter16*wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("16-25 : %s\n", result);
+			crs_cnt = int((counter26*wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("26-35 : %s\n", result);
+			crs_cnt = int((counter36*wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("36-45 : %s\n", result);
+			crs_cnt = int((counter46*wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("46-55 : %s\n", result);
+			crs_cnt = int((counter56*wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("56-65 : %s\n", result);
+			crs_cnt = int((counter66*wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("66-75 : %s\n", result);
+			crs_cnt = int((counter76*wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("76-85 : %s\n", result);
+			crs_cnt = int((counter86*wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("86-95 : %s\n", result);
+			crs_cnt = int((counter96*wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("96-105: %s\n", result);
+			crs_cnt = int((counter106*wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf(">105  : %s\n", result);
+			crs_cnt = int((counterNone*wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result); printf("None  : %s\n", result);
+		}'
+	fi	
+}
+
+#	Counts the amount of infected daily-wise
+
+dailyCommand() {
+	if [ $width = -1 ]; then
+		awk 'BEGIN{FS=","
+		cntNone = 0;}
+		{
+			if($1 != "id") {
+				if($2 == "")
+					cntNone++;
+				else	
+					map[$2] += 1;
+			}
+		} 
+		END{
+			n=asorti(map, sorted)
+			for (i=1; i <= n; i++) {
+				print sorted[i] ": " map[sorted[i]]
+			}
+			if (cntNone > 0) {print "None: " cntNone}
+		}'
+
+	elif [ $width = 0 ]; then
+		width=500
+		awk -v wid="$width" 'BEGIN{FS=","}
+		{if(FNR > 1) {map[$2] += 1}} 
+		END{
+			n=asorti(map, sorted)
+			for (i=1; i <= n; i++) {
+				crs_cnt = int(map[sorted[i]]/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result);
+				if(crs_cnt == 0) {
+					printf("%s:\n", sorted[i]);
+				}
+				else {
+					printf("%s: %s\n", sorted[i], result);
+				}
+			}
+		}'
+
+	else
+		awk -v wid="$width" 'BEGIN{FS=","}
+		{if(FNR > 1) {map[$2] += 1}} 
+		END{
+			max=map[0];
+			for (i in map) {
+				if (map[i] > max) {
+					max = map[i];
+				}
+			}
+			n=asorti(map, sorted)
+			for (i=1; i <= n; i++) {
+				crs_cnt = int((map[sorted[i]] * wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result);  if (sorted[i] != 0 ) { printf("%s: %s\n", sorted[i], result);}
+			}
+		}'
+	fi		
+}
+
+#	Counts the amount of infected monthly-wise
+
+monthlyCommand() {
+	if [ $width = -1 ]; then
+		awk 'BEGIN{FS=","
+		cntNone = 0;}
+		{if($1 != "id") { if($2 == "") {cntNone++;} else {$2=substr($2, 0, 7); map[$2] += 1;}}} 
+		END{
+			n=asorti(map, sorted)
+			for (i=1; i <= n; i++) {
+				print sorted[i] ": " map[sorted[i]]
+			}
+			if (cntNone > 0) {print "None: " cntNone}
+		}'
+
+	elif [ $width = 0 ]; then
+		width=10000
+		awk -v wid="$width" 'BEGIN{FS=","}
+		{if($1 != "id") { $2=substr($2, 0, 7); map[$2] += 1}} 
+		END{
+			n=asorti(map, sorted)
+			for (i=1; i <= n; i++) {
+				crs_cnt = int(map[sorted[i]]/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result);
+				if(crs_cnt == 0) {
+					printf("%s:\n", sorted[i]);
+				}
+				else {
+					printf("%s: %s\n", sorted[i], result);
+				}
+			}
+		}'
+
+	else
+		awk -v wid="$width" 'BEGIN{FS=","}
+		{if($1 != "id") { $2=substr($2, 0, 7); map[$2] += 1}} 
+		END{
+			max=map[0];
+			for (i in map) {
+				if (map[i] > max) {
+					max = map[i];
+				}
+			}
+			n=asorti(map, sorted)
+			for (i=1; i <= n; i++) {
+				crs_cnt = int((map[sorted[i]] * wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result);  if (sorted[i] != 0 ) { printf("%s: %s\n", sorted[i], result);}
+			}
+		}'	
+	fi		
+}
+
+#	Counts the amount of infected yearly-wise
+
+yearlyCommand() {
+	if [ $width = -1 ]; then
+		awk 'BEGIN{FS=","
+		cntNone = 0;}
+		{if($1 != "id") { if($2 == "") {cntNone++;} else {$2=substr($2, 0, 4); map[$2] += 1}}}
+		END{
+			n=asorti(map, sorted)
+			for (i=1; i <= n; i++) {
+				print sorted[i] ": " map[sorted[i]]
+			}
+			if (cntNone > 0) {print "None: " cntNone}
+		}'
+
+	elif [ $width = 0 ]; then
+		width=100000
+		awk -v wid="$width" 'BEGIN{FS=","}
+		{if($1 != "id") { $2=substr($2, 0, 4); map[$2] += 1}} 
+		END{
+			n=asorti(map, sorted)
+			for (i=1; i <= n; i++) {
+				crs_cnt = int(map[sorted[i]]/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result);
+				if(crs_cnt == 0) {
+					printf("%s:\n", sorted[i]);
+				}
+				else {
+					printf("%s: %s\n", sorted[i], result);
+				}
+			}
+		}'
+
+	else
+		awk -v wid="$width" 'BEGIN{FS=","}
+		{if($1 != "id") { $2=substr($2, 0, 4); map[$2] += 1}} 
+		END{
+			max=map[0];
+			for (i in map) {
+				if (map[i] > max) {
+					max = map[i];
+				}
+			}
+			n=asorti(map, sorted)
+			for (i=1; i <= n; i++) {
+				crs_cnt = int((map[sorted[i]] * wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result);  if (sorted[i] != 0 ) { printf("%s: %s\n", sorted[i], result);}
+			}
+		}'	
+	fi
+}
+
+#	Counts the amount of infected countries-wise
+
+countriesCommand() {
+	if [ $width = -1 ]; then
+		awk 'BEGIN{FS=","}
+		{if( ($1 != "id") && ($8 != "")) { map[$8] += 1}}
+		END{
+			n=asorti(map, sorted)
+			for (i=1; i <= n; i++) {
+				print sorted[i] ": " map[sorted[i]]
+			}
+		}'
+
+	elif [ $width = 0 ]; then
+		width=100
+		awk -v wid="$width" 'BEGIN{FS=","
+		cntNone = 0;}
+		{if($1 != "id" && $8 != "") { map[$8] += 1}} 
+		END{
+			n=asorti(map, sorted)
+			for (i=1; i <= n; i++) {
+				crs_cnt = int(map[sorted[i]]/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result);
+				if(crs_cnt == 0) {
+					printf("%s:\n", sorted[i]);
+				}
+				else {
+					printf("%s: %s\n", sorted[i], result);
+				}
+			}
+		}'
+
+	else
+		awk -v wid="$width" 'BEGIN{FS=","}
+		{if(FNR > 1 && $8 != "") { map[$8] += 1}} 
+		END{
+			max=map[0];
+			for (i in map) {
+				if (map[i] > max) {
+					max = map[i];
+				}
+			}
+			n=asorti(map, sorted)
+			for (i=1; i <= n; i++) {
+				crs_cnt = int((map[sorted[i]] * wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result);  if (sorted[i] != 0 ) { printf("%s: %s\n", sorted[i], result);}
+			}
+		}'	
+	fi		
+}
+
+#	Counts the amount of infected district-wise
+
+districtsCommand() {
+	if [ $width = -1 ]; then
+		awk 'BEGIN{FS=","
+		cntNone = 0;}
+		{if($1 != "id") { 
+			if ($6 == "") {
+				cntNone++
+			}
+			else {
+				map[$6] += 1
+			}
+		}}		 
+		END{
+			n=asorti(map, sorted)
+			for (i=1; i <= n; i++) {
+				print sorted[i] ": " map[sorted[i]]
+			}
+			print "None: " cntNone
+		}'
+
+	elif [ $width = 0 ]; then
+		width=1000
+		awk -v wid="$width" 'BEGIN{FS=","}
+		{if($1 != "id") { 
+			if ($6 == "") {
+				cntNone++
+			}
+			else {
+				map[$6] += 1
+			}
+		}} 
+		END{
+			n=asorti(map, sorted)
+			for (i=1; i <= n; i++) {
+				crs_cnt = int(map[sorted[i]]/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result);
+				if(crs_cnt == 0) {
+					printf("%s:\n", sorted[i]);
+				}
+				else {
+					printf("%s: %s\n", sorted[i], result);
+				}
+			}
+		}'
+
+	else
+		awk -v wid="$width" 'BEGIN{FS=","}
+		{if($1 != "id") { 
+			if ($6 == "") {
+				cntNone++
+			}
+			else {
+				map[$6] += 1
+			}
+		}}  
+		END{
+			max=map[0];
+			for (i in map) {
+				if (map[i] > max) {
+					max = map[i];
+				}
+			}
+			n=asorti(map, sorted)
+			for (i=1; i <= n; i++) {
+				crs_cnt = int((map[sorted[i]] * wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result);  if (sorted[i] != 0 ) { printf("%s: %s\n", sorted[i], result);}
+			}
+		}'	
+	fi		
+}
+
+#	Counts the amount of infected region-wise
+
+regionsCommand() {
+	if [ $width = -1 ]; then
+		awk 'BEGIN{FS=","
+		cntNone = 0;}
+		{	
+			if($1 != "id") { 
+			if ($5 == "") {
+				cntNone++
+			}
+			else {
+				map[$5] += 1
+			}
+		}} 
+		END{
+			n=asorti(map, sorted)
+			for (i=1; i <= n; i++) {
+				print sorted[i] ": " map[sorted[i]]
+			}
+			print "None: " cntNone
+		}'
+
+	elif [ $width = 0 ]; then
+		width=10000
+		awk -v wid="$width" 'BEGIN{FS=","}
+		{if($1 != "id" && $5 != "") { map[$5] += 1}} 
+		END{
+			n=asorti(map, sorted)
+			for (i=1; i <= n; i++) {
+				crs_cnt = int(map[sorted[i]]/wid); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result);
+				if(crs_cnt == 0) {
+					printf("%s:\n", sorted[i]);
+				}
+				else {
+					printf("%s: %s\n", sorted[i], result);
+				}
+			}
+		}'
+
+	else
+		awk -v wid="$width" 'BEGIN{FS=","}
+		{if($1 != "id" && $5 != "") { map[$5] += 1}} 
+		END{
+			max=map[0];
+			for (i in map) {
+				if (map[i] > max) {
+					max = map[i];
+				}
+			}
+			n=asorti(map, sorted)
+			for (i=1; i <= n; i++) {
+				crs_cnt = int((map[sorted[i]] * wid)/max); result=sprintf("%*s", crs_cnt,""); gsub(" ", "#", result);  if (sorted[i] != 0 ) { printf("%s: %s\n", sorted[i], result);}
+			}
+		}'	
+	fi	
+}
+
+#	Checks if the date and age are invalid. The age must be a positive integer.
+#	Filtering function follows. It filters the input based on the switches.
+#	Below that the same code is repeated three times for each type of input.
+
+validateData() {
+	awk -F ',' '{if ((FNR > 1) && ($3 < 0) && ($3 != "")){print "Invalid age: "$0 > "/dev/stderr"; next;}
+				if ((FNR > 1) && ($3 > int($3)) && ($3 != "")){print "Invalid age: "$0 > "/dev/stderr"; next;}
+				}' $input
+	awk -F, '{
+		if ($2 != "") {
+			gsub(/[[:blank:]]/, "", $2);
+			year = int(substr($2, 0, 4));
+			month = int(substr($2, 6, 2));
+			day = int(substr($2, 9, 2));
+			if (FNR == 1) {
+				next;
+			}
+
+			if (year < 2020 || month <= 0 || day <= 0) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month > 12 || day > 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month == 2 && day > 28) {
+				if ((year % 4 == 0) && (year % 100 != 0) || (year % 400 == 0)) {
+					if (day != 29) {
+						print "Invalid date: "$0 > "/dev/stderr";
+						next;
+					}
+				}
+				else {
+					print "Invalid date: "$0 > "/dev/stderr";
+					next;
+				}
+			}
+
+			if (month == 4 && day == 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month == 6 && day == 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month == 9 && day == 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month == 11 && day == 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+		}	
+	}' $input
+}
+
+filterData() {
+	if [ "$gender" = "M" ]; then
+		awk -F ',' -v after="$datetime_after" -v before="$datetime_before" '{if ((FNR > 1) && (($2 >= after) || ($2 == "")) && (($2 <= before) || ($2 == "")) && ($4 == "M")){print}}' $input | $1
+	
+	elif [ "$gender" = "Z" ]; then
+		awk -F ',' -v after="$datetime_after" -v before="$datetime_before" '{if ((FNR > 1) && (($2 >= after) || ($2 == "")) && (($2 <= before) || ($2 == "")) && ($4 == "Z")){print}}' $input | $1
+	
+	else
+		awk -F ',' -v after="$datetime_after" -v before="$datetime_before" '{if ((FNR > 1) && (($2 >= after) || ($2 == "")) && (($2 <= before) || ($2 == ""))){print}}' $input | $1
+	fi
+}
+
+filterDataGz() {
+	if [ "$gender" = "M" ]; then
+		gunzip -qq -c $gz_input | awk -F ',' -v after="$datetime_after" -v before="$datetime_before" '{if ((FNR > 1) && (($2 >= after) || ($2 == "")) && (($2 <= before) || ($2 == "")) && ($4 == "M")){print}}' | $1
+	
+	elif [ "$gender" = "Z" ]; then
+		gunzip -qq -c $gz_input | awk -F ',' -v after="$datetime_after" -v before="$datetime_before" '{if ((FNR > 1) && (($2 >= after) || ($2 == "")) && (($2 <= before) || ($2 == "")) && ($4 == "Z")){print}}' | $1
+	
+	else
+		gunzip -qq -c $gz_input | awk -F ',' -v after="$datetime_after" -v before="$datetime_before" '{if ((FNR > 1) && (($2 >= after) || ($2 == "")) && (($2 <= before) || ($2 == ""))){print}}' | $1
+	fi
+}
+
+validateDataGz() {
+	gunzip -qq -c $gz_input | awk -F ',' '{if ((FNR > 1) && ($3 < 0) && ($3 != "")){print "Invalid age: "$0 > "/dev/stderr"; next;}
+				if ((FNR > 1) && ($3 > int($3)) && ($3 != "")){print "Invalid age: "$0 > "/dev/stderr"; next;}
+				}' 
+	gunzip -qq -c $gz_input | awk -F, '{
+		if ($2 != "") {
+			gsub(/[[:blank:]]/, "", $2);
+			year = int(substr($2, 0, 4));
+			month = int(substr($2, 6, 2));
+			day = int(substr($2, 9, 2));
+			if (FNR == 1) {
+				next;
+			}
+
+			if (year < 2020 || month <= 0 || day <= 0) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month > 12 || day > 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month == 2 && day > 28) {
+				if ((year % 4 == 0) && (year % 100 != 0) || (year % 400 == 0)) {
+					if (day != 29) {
+						print "Invalid date: "$0 > "/dev/stderr";
+						next;
+					}
+				}
+				else {
+					print "Invalid date: "$0 > "/dev/stderr";
+					next;
+				}
+			}
+
+			if (month == 4 && day == 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month == 6 && day == 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month == 9 && day == 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month == 11 && day == 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+		}	
+	}' 
+}
+
+filterDataBz() {
+	if [ "$gender" = "M" ]; then
+		bzip2 -d -qq -c $bz_input | awk -F ',' -v after="$datetime_after" -v before="$datetime_before" '{if ((FNR > 1) && (($2 >= after) || ($2 == "")) && (($2 <= before) || ($2 == "")) && ($4 == "M")){print}}' | $1
+	
+	elif [ "$gender" = "Z" ]; then
+		bzip2 -d -qq -c $bz_input | awk -F ',' -v after="$datetime_after" -v before="$datetime_before" '{if ((FNR > 1) && (($2 >= after) || ($2 == "")) && (($2 <= before) || ($2 == "")) && ($4 == "Z")){print}}' | $1
+	
+	else
+		bzip2 -d -qq -c $bz_input | awk -F ',' -v after="$datetime_after" -v before="$datetime_before" '{if ((FNR > 1) && (($2 >= after) || ($2 == "")) && (($2 <= before) || ($2 == ""))){print}}' | $1
+	fi
+}
+
+validateDataBz() {
+	bzip2 -d -qq -c $bz_input | awk -F ',' '{if ((FNR > 1) && ($3 < 0) && ($3 != "")){print "Invalid age: "$0 > "/dev/stderr"; next;}
+				if ((FNR > 1) && ($3 > int($3)) && ($3 != "")){print "Invalid age: "$0 > "/dev/stderr"; next;}
+				}' 
+	bzip2 -d -qq -c $bz_input | awk -F, '{
+		if ($2 != "") {
+			gsub(/[[:blank:]]/, "", $2);
+			year = int(substr($2, 0, 4));
+			month = int(substr($2, 6, 2));
+			day = int(substr($2, 9, 2));
+			if (FNR == 1) {
+				next;
+			}
+
+			if (year < 2020 || month <= 0 || day <= 0) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month > 12 || day > 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month == 2 && day > 28) {
+				if ((year % 4 == 0) && (year % 100 != 0) || (year % 400 == 0)) {
+					if (day != 29) {
+						print "Invalid date: "$0 > "/dev/stderr";
+						next;
+					}
+				}
+				else {
+					print "Invalid date: "$0 > "/dev/stderr";
+					next;
+				}
+			}
+
+			if (month == 4 && day == 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month == 6 && day == 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month == 9 && day == 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month == 11 && day == 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+		}	
+	}' 
+}
+
+validateDataNoInput() {
+	echo "$data" | awk -F ',' '{if ((FNR > 1) && ($3 < 0) && ($3 != "")){print "Invalid age: "$0 > "/dev/stderr"; next;}
+				if ((FNR > 1) && ($3 > int($3)) && ($3 != "")){print "Invalid age: "$0 > "/dev/stderr"; next;}
+				}'
+	echo "$data" | awk -F, '{
+		if ($2 != "") {
+			gsub(/[[:blank:]]/, "", $2);
+			year = int(substr($2, 0, 4));
+			month = int(substr($2, 6, 2));
+			day = int(substr($2, 9, 2));
+			if (FNR == 1) {
+				next;
+			}
+
+			if (year < 2020 || month <= 0 || day <= 0) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month > 12 || day > 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month == 2 && day > 28) {
+				if ((year % 4 == 0) && (year % 100 != 0) || (year % 400 == 0)) {
+					if (day != 29) {
+						print "Invalid date: "$0 > "/dev/stderr";
+						next;
+					}
+				}
+				else {
+					print "Invalid date: "$0 > "/dev/stderr";
+					next;
+				}
+			}
+
+			if (month == 4 && day == 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month == 6 && day == 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month == 9 && day == 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+
+			if (month == 11 && day == 31) {
+				print "Invalid date: "$0 > "/dev/stderr";
+				next;
+			}
+		}	
+	}'
+}
+
+filterDataNoInput() {
+	if [ "$gender" = "M" ]; then
+		echo "$data" | awk -F ',' -v after="$datetime_after" -v before="$datetime_before" '{if ((FNR > 1) && (($2 >= after) || ($2 == "")) && (($2 <= before) || ($2 == "")) && ($4 == "M")){print}}' | $1
+	
+	elif [ "$gender" = "Z" ]; then
+		echo "$data" | awk -F ',' -v after="$datetime_after" -v before="$datetime_before" '{if ((FNR > 1) && (($2 >= after) || ($2 == "")) && (($2 <= before) || ($2 == "")) && ($4 == "Z")){print}}' | $1
+	
+	else
+		echo "$data" | awk -F ',' -v after="$datetime_after" -v before="$datetime_before" '{if ((FNR > 1) && (($2 >= after) || ($2 == "")) && (($2 <= before) || ($2 == ""))){print}}' | $1
+	fi
+}
+
+#	Chooses the right function to be called based on how the program is ran.
+
+chooseCommand() {
+	if [[ -z $command ]]; then
+		command_function="mergeCommand"
+	else	
+		case ${command} in 
+			infected )
+				command_function="infectedCommand"
+				;;
+
+			merge )
+				command_function="mergeCommand"	
+				;;
+
+			gender )
+				command_function="genderCommand"
+				;;
+
+			age )
+				command_function="ageCommand"
+				;;
+
+			daily )
+				command_function="dailyCommand"
+				;;
+
+			monthly )
+				command_function="monthlyCommand"
+				;;
+
+			yearly )
+				command_function="yearlyCommand"
+				;;
+
+			countries )
+				command_function="countriesCommand"
+				;;
+
+			districts )
+				command_function="districtsCommand"
+				;;
+
+			regions )
+				command_function="regionsCommand"
+				;;
+			\? )
+				echo "Wrong command"
+				;;
+		esac
+	fi	
+}
+
+#	Parsing arguments
+
+while [ $# -gt 0 ]; do
+	case $1 in 
+		-h )
+			help_function
+		;;
+		
+		-a|--date_after )
+			datetime_after=$2
+			shift
+			shift
+		;;
+		
+		-b|--date_before )
+			datetime_before=$2
+			shift
+			shift
+		;;
+
+		-g|--gender_opt )
+			gender=$2
+			shift
+			shift
+		;;
+		
+		-s )
+			if ! [[ $2 =~ $is_number_regex ]]; then
+				width=0
+			else
+				width=$2
+				shift
+			fi
+			shift		
+		;;
+
+		*.csv )
+			input="$input $1"
+			has_input=1
+			has_no_input=0
+			shift
+		;;
+		
+		*.csv.gz )
+			gz_input="$gz_input $1"
+			has_gz_input=1
+			has_no_input=0
+			shift
+		;;
+		
+		*.csv.bz2 )
+			bz_input="$bz_input $1"
+			has_bz_input=1
+			has_no_input=0
+			shift
+		;;
+		
+		* )
+			command=$1
+			if [[ $command != "infected" && $command != "merge" && $command != "gender" && $command != "age" && $command != "daily" && $command != "monthly" && $command != "yearly" && $command != "countries" && $command != "districts" && $command != "regions" ]]; then
+				echo "Wrong input!"
+				exit 1
+			fi	
+			shift		
+		;;	
+	esac
+done			
+
+chooseCommand
+
+#	Calling the correct function.
+
+if [[ $has_input = 1 ]]; then
+	validateData
+	filterData $command_function
+fi
+
+if [[ $has_gz_input = 1 ]]; then
+	validateDataGz
+	filterDataGz $command_function
+fi
+
+if [[ $has_bz_input = 1 ]]; then
+	validateDataBz
+	filterDataBz $command_function
+fi		
+
+if [[ $has_no_input = 1 ]]; then
+	data=$(cat)
+	validateDataNoInput
+	filterDataNoInput $command_function
+fi	
